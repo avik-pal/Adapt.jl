@@ -1,6 +1,20 @@
 # predefined adaptors for working with types from the Julia standard library
 
-adapt_structure(to, xs::Union{Tuple,NamedTuple}) = map(adapt(to), xs)
+# Use recursion to avoid inference bail-out in `map`
+#adapt_structure(to, xs::Union{Tuple,NamedTuple}) = map(adapt(to), xs)
+adapt_structure(to, xs::NamedTuple) = map(adapt(to), xs)
+# Specialize on small Tuples
+function adapt_structure(to, xs::Tuple)
+  if length(xs) ≤ 20
+    _adapt_tuple_structure(to, xs)
+  else
+    map(adapt(to), xs)
+  end
+end
+_adapt_tuple_structure(to, xs::Tuple) =
+  (adapt(to, first(xs)), _adapt_tuple_structure(to, Base.tail(xs))...)
+_adapt_tuple_structure(to, xs::Tuple{}) = ()
+_adapt_tuple_structure(to, xs::Tuple{<:Any}) = (adapt(to, first(xs)), )
 
 
 ## Closures
@@ -50,3 +64,22 @@ adapt_structure(to, bc::Broadcasted{Style}) where Style =
 
 adapt_structure(to, ex::Extruded) =
     Extruded(adapt(to, ex.x), ex.keeps, ex.defaults)
+
+
+## Ranges
+
+adapt_structure(to, r::UnitRange) =
+  UnitRange(adapt(to, r.start), adapt(to, r.stop))
+
+adapt_structure(to, r::Base.OneTo) = Base.OneTo(adapt(to, r.stop))
+
+adapt_structure(to, r::StepRange) =
+  StepRange(adapt(to, r.start), adapt(to, r.step), adapt(to, r.stop))
+
+adapt_structure(to, r::StepRangeLen{T}) where T =
+  StepRangeLen{T}(adapt(to, r.ref), adapt(to, r.step), r.len, r.offset)
+
+adapt_structure(to, r::Base.Slice) = Base.Slice(adapt(to, r.indices))
+
+adapt_structure(to, r::LinRange) =
+  LinRange(adapt(to, r.start), adapt(to, r.stop), r.len)
